@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>Mapping with D3</title>
+	<script src="http://d3js.org/d3.v4.min.js" charset="utf-8"></script>
+        <script
+        src="http://cdn.leafletjs.com/leaflet-0.7/leaflet.js">
+    </script>
+    <script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+    <script src="https://d3js.org/d3-color.v1.min.js"></script>
+<script src="https://d3js.org/d3-interpolate.v1.min.js"></script>
+    <script src="pair_node_criticality.json"></script>
+   <link 
+        rel="stylesheet" 
+        href="http://cdn.leafletjs.com/leaflet-0.7/leaflet.css"
+    />
+	<link href="http://fonts.googleapis.com/css?family=Montserrat" rel="stylesheet" type="text/css">
+
+<style>
+    body {
+        font-size: .8em;
+        font-family: "Proxima Nova", "Montserrat", sans-serif;
+    }
+
+     #map {
+         width: 50%;
+         height: 90%;
+         float: left;
+         margin: 60px 20px;
+     }
+    
+    #svg {
+        display:inline-block;
+     }
+    
+
+    
+    #info {
+        width: 30%;
+        height: 90%;
+        display:inline-block;
+        float: right;
+        position:relative;
+        margin: 100px 20px;
+     }
+
+    button {
+        margin: 10px 0;
+    }  
+    
+h1, h2 {
+    position: absolute;
+    left: 10px;
+    font-size: 1.3em;
+    font-weight: 100;
+}
+     
+h2 {
+    top: 30px;
+    font-size: 1em;
+    color: steelblue;
+}
+
+.synergy {
+        font-size: 1.3em;
+    font-weight: 100;
+        color: steelblue;
+    }    
+.st_point {
+    fill: #274127;
+    stroke: white;
+    border: 1px solid white;
+}
+     
+.hover-r {
+    fill: #638E64;  
+    stroke: white;
+    border: 1px solid white;
+}
+
+hover-r {
+    fill: crimson;
+    stroke: white;
+    border: 1px solid white;
+    }
+    
+
+
+     
+table {
+    border-collapse: collapse;
+    margin: 50px 0;
+    
+
+}
+
+td, th {
+  padding: 4px 8px;
+  border: 1px solid #efefef;
+  text-align: left;
+  vertical-align: middle;
+  width:33%;
+  font-size: .75em;
+  color: #4D557F;
+ 
+}
+
+tr:first-child th {
+  background-color:#4D557F;
+  color: #fff;
+  font-size: 1em;    
+}
+
+tr:nth-child(even) {
+  background-color: #f2f2f2;
+}
+
+tr:hover {
+  background-color: #FFFE6C;
+}
+
+     
+</style>
+
+</head>
+<body>
+    <h1>NYC Subway System</h1>
+    <h2></h2>
+    <section id = "map" style="width: 800px; height: 710px">
+    <div id="legend" style="width: 80px; height: 10px"></div> 
+    </section>
+
+    <section id="info"><h3>Station Criticality Data</h3>
+        <div id="selectdata"><p>Stations Disrupted</p></div>
+        <div id="dtable"></div>
+        <button type="button" onclick="clearrecalc()">Clear last</button>
+    </section>
+
+    <script>
+
+       
+    //_____________________________PARAMETERS_____________________________
+    
+        
+  var rnodes = [];
+  var minDelay = d3.min(pnr_json.features, function (d) { return (d.delay_with_demand-d.sum)/d.sum*100;});
+   
+  var maxDelay = d3.max(pnr_json.features, function (d) { return (d.delay_with_demand-d.sum)/d.sum*100;});
+        
+ var color = d3.scaleQuantize()
+    .domain(d3.range(minDelay,maxDelay))
+   .range(d3.schemeBlues[9]);
+
+  
+
+        
+    //_____________________________SVG_____________________________
+    var map = L.map('map').setView([40.730610, -73.935242], 11);
+    mapLink = 
+        '<a href="http://openstreetmap.org">OpenStreetMap</a>';
+    L.tileLayer(
+        'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; ' + mapLink + ' Contributors',
+         maxZoom: 18,
+        }).addTo(map);
+        
+    /* Initialize the SVG layer */
+	map._initPathRoot()    
+    /* pick up the SVG from the map object */
+	var svg = d3.select("#map").select("svg"),
+	g = svg.append("g");
+    
+        
+var x = d3.scaleLinear()
+    .domain([minDelay, maxDelay])
+    .rangeRound([600, 860]);
+        
+//_____________________________LEGEND_____________________________   
+
+var leg = d3.select("#legend").append("g")
+    .attr("class", "key")
+    .attr("transform", "translate(0,40)");
+
+leg.selectAll("rect")
+  .data(color.range().map(function(d) {
+      d = color.invertExtent(d);
+      if (d[0] == null) d[0] = x.domain()[0];
+      if (d[1] == null) d[1] = x.domain()[1];
+      return d;
+    }))
+  .enter().append("rect")
+    .attr("height", 8)
+    .attr("x", function(d) { return x(d[0]); })
+    .attr("width", function(d) { return x(d[1]) - x(d[0]); })
+    .attr("fill", function(d) { return color(d[0]); });
+
+        
+        
+      //_____________________________D3_____________________________      
+   
+
+    d3.json("singlenodecriticality.json", function(error, collection) {  if (error) throw error;
+                                                                       
+		/* Add a LatLng object to each item in the dataset */
+		collection.objects.forEach(function(d) { 
+			d.LatLng = new L.LatLng(d.geometry.coordinates[1],
+									d.geometry.coordinates[0])
+		})
+		
+		var feature = g.selectAll("circle")
+			.data(collection.objects)
+			.enter().append("circle")
+			.attr("r", function(d) { return d.properties.delay*.00000005;})
+            .attr("class",function(d) { return "st_point";})
+            .attr("data-name", function(d) { return d.properties.station;})
+            .attr("data-sdelay", function(d) { return d.properties.delay;})
+            .on("mouseover", function(d){
+                d3.select("h2").text(d.properties.station);
+                d3.select(this).attr("class", "st_point hover-r");
+            })
+            .on("mouseout", function(d){
+                d3.select("h2").text("");
+                d3.select(this).attr("class",function(d) { return "id_"+d.properties.station_id + " st_point";});
+            }) 
+            .on("click", disrupt);
+            
+		
+		map.on("viewreset", update);
+		update();
+
+		function update() {
+			feature.attr("transform", 
+			function(d) { 
+				return "translate("+ 
+					map.latLngToLayerPoint(d.LatLng).x +","+ 
+					map.latLngToLayerPoint(d.LatLng).y +")";
+				}
+			)
+		}
+	})			
+   
+  
+
+    
+        
+//____________________________FUNCTIONS____________________________
+
+function disrupt () {
+    //.................add the hover-s class; clear the stations disrupted span
+    this.setAttribute("class","st_point hover-s")
+    d3.select("#selectdata").select("span").remove();
+    d3.select("#dtable").select("span").remove();
+    //.................only add stations to disrupt if list is less than 2, if over, send an alert
+    if (rnodes.length<2){
+        rnodes.push(this.getAttribute('data-name'));}
+    else {
+        window.alert("Two stations have already been selected. Clear the list to select alternate stations.");
+    }
+    //.................update the stations disrupted span
+        d3.select("#selectdata").append("span").text( rnodes);
+    
+        
+    var paired = pnr_json.features.filter(function (p){ return p.station_0==rnodes[0] && p.station_1==rnodes[1];});
+    
+       
+    // render the table(s)
+	d3.select('#dtable').select("table").remove();
+    
+    var tabledet = [{"station":paired[0].station_0,"criticality":paired[0].delay_0},
+                    {"station":paired[0].station_1,"criticality":paired[0].delay_1},
+                    {"station":rnodes, "criticality": paired[0].delay_with_demand}];
+    
+    
+    tabulate(tabledet, ['station', 'criticality']); 
+    d3.select("#dtable").append("span").text( "Synergy: "+(paired[0].delay_with_demand-paired[0].sum)/paired[0].sum*100+"%").attr("class","synergy");
+    d3.selectAll("circle").style("fill",color((paired[0].delay_with_demand-paired[0].sum)/paired[0].sum*100));
+};
+
+function clearrecalc (){
+    //.................clear the stations disrupted span
+    d3.select("#selectdata").select("span").remove();
+    d3.select("#dtable").select("span").remove();
+    d3.selectAll("circle").style("fill","#274127");
+    //.................clear the last stations to disrupt added
+    rnodes.pop();
+    //.................update the stations disrupted span
+    d3.select("#selectdata").append("span").text( rnodes);
+    
+    
+};
+     
+function tabulate(data, columns) {
+		var table = d3.select('#dtable').append('table')
+		var thead = table.append('thead')
+		var	tbody = table.append('tbody');
+		// append the header row
+		thead.append('tr')
+		  .selectAll('th')
+		  .data(columns).enter()
+		  .append('th')
+		    .text(function (column) { return column; });
+		// create a row for each object in the data
+		var rows = tbody.selectAll('tr')
+		  .data(data)
+		  .enter()
+		  .append('tr');
+		// create a cell in each row for each column
+		var cells = rows.selectAll('td')
+		  .data(function (row) {
+		    return columns.map(function (column) {
+		      return {column: column, value: row[column]};
+		    });
+		  })
+		  .enter()
+		  .append('td')
+		    .text(function (d) { return d.value; });
+	  return table;
+	}
+	// render the table(s)
+	//tabulate(tabledet, ['Removed Nodes', 'Summed Criticality', 'Paired Criticality']); // 3 column table
+    
+     
+        
+    </script>
+</body>
+</html>
