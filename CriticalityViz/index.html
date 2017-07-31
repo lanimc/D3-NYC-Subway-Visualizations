@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<title>Mapping with D3</title>
+	<title>NYC Subway Criticality</title>
 	<script src="http://d3js.org/d3.v4.min.js" charset="utf-8"></script>
         <script
         src="http://cdn.leafletjs.com/leaflet-0.7/leaflet.js">
@@ -10,6 +10,7 @@
     <script src="https://d3js.org/d3-color.v1.min.js"></script>
 <script src="https://d3js.org/d3-interpolate.v1.min.js"></script>
     <script src="pair_node_criticality.json"></script>
+   
    <link 
         rel="stylesheet" 
         href="http://cdn.leafletjs.com/leaflet-0.7/leaflet.css"
@@ -20,19 +21,47 @@
     body {
         font-size: .8em;
         font-family: "Proxima Nova", "Montserrat", sans-serif;
+        
     }
-
-     #map {
-         width: 50%;
-         height: 90%;
+    
+    .header {
+        padding: 20px;
+        position: absolute;
+        width: 100%;
+    }
+    
+    .main {
+        padding: 20px;
+        width: 100%;
+    }
+    
+    .grad {
+    background: #efefef; /* For browsers that do not support gradients */
+    background: -webkit-linear-gradient(#efefef, #fff); /* For Safari 5.1 to 6.0 */
+    background: -o-linear-gradient(#efefef, #fff); /* For Opera 11.1 to 12.0 */
+    background: -moz-linear-gradient(#efefef, #fff); /* For Firefox 3.6 to 15 */
+    background: linear-gradient(#efefef, #fff); /* Standard syntax */
+}
+    
+    #legend {
+        height: 30px;
+        width: 700px;
+        margin:95px 0 0px 0px ;
+        font-size: .65em;
+        color:#08306b;
+    }
+    
+    .domain, .tick line {
+        stroke: #fff;
+    } 
+    
+    .tick text {
+        fill: #efefef;
+    }
+ 
+    #map {
          float: left;
-         margin: 60px 20px;
      }
-    
-    #svg {
-        display:inline-block;
-     }
-    
 
     
     #info {
@@ -41,7 +70,7 @@
         display:inline-block;
         float: right;
         position:relative;
-        margin: 100px 20px;
+        margin: 95px 20px;
      }
 
     button {
@@ -49,43 +78,42 @@
     }  
     
 h1, h2 {
-    position: absolute;
-    left: 10px;
     font-size: 1.3em;
     font-weight: 100;
 }
      
 h2 {
-    top: 30px;
     font-size: 1em;
     color: steelblue;
 }
 
+
 .synergy {
-        font-size: 1.3em;
-    font-weight: 100;
-        color: steelblue;
+    color: steelblue;
+    display: block;
     }    
+    
 .st_point {
-    fill: #274127;
+    fill: #477F73;
     stroke: white;
     border: 1px solid white;
 }
      
-.hover-r {
+
+.st_point:hover {
     fill: #638E64;  
     stroke: white;
     border: 1px solid white;
+    cursor: pointer;
 }
+    
 
-hover-r {
+.sel {
     fill: crimson;
     stroke: white;
     border: 1px solid white;
     }
     
-
-
      
 table {
     border-collapse: collapse;
@@ -124,44 +152,52 @@ tr:hover {
 
 </head>
 <body>
-    <h1>NYC Subway System</h1>
-    <h2></h2>
-    <section id = "map" style="width: 800px; height: 710px">
-    <div id="legend" style="width: 80px; height: 10px"></div> 
+    <section class="header grad">
+        <h1>Networks of Urban Vulnerability: NYC Subway System</h1>
+        <h2></h2>
     </section>
-
-    <section id="info"><h3>Station Criticality Data</h3>
-        <div id="selectdata"><p>Stations Disrupted</p></div>
-        <div id="dtable"></div>
-        <button type="button" onclick="clearrecalc()">Clear last</button>
-    </section>
+    
+    <main class="main">
+        <section id="legend" >Relative Synergy Scale</section>
+        <section id="map" style="width: 700px; height: 610px"></section>
+        <section id="info"><h3>Station Criticality Data</h3>
+            <div id="selectdata"><p>Stations Disrupted</p></div>
+            <div id="dtable"></div>
+            <button type="button" onclick="clearrecalc()">Clear last</button>
+        </section>
+    </main>
 
     <script>
 
        
     //_____________________________PARAMETERS_____________________________
-    
+    var userselect = ["criticality"];
         
-  var rnodes = [];
-  var minDelay = d3.min(pnr_json.features, function (d) { return (d.delay_with_demand-d.sum)/d.sum*100;});
+    var rnodes = [];
+    var minDelay = d3.min(pnr_json.features, function (d) { return (d.synergy)/d.sum;});
    
-  var maxDelay = d3.max(pnr_json.features, function (d) { return (d.delay_with_demand-d.sum)/d.sum*100;});
-        
- var color = d3.scaleQuantize()
-    .domain(d3.range(minDelay,maxDelay))
-   .range(d3.schemeBlues[9]);
-
+    var maxDelay = d3.max(pnr_json.features, function (d) { return (d.synergy)/d.sum;});
+    
+    //scale relative synergy to between 0 and 1 and map it to blues
+    var color = d3.scaleQuantile()
+        .domain([minDelay,maxDelay])
+        .range(d3.schemeBlues[9]);
+    
   
+console.log(minDelay,maxDelay);
+console.log(color(minDelay));   
+console.log(color(maxDelay));  
 
         
     //_____________________________SVG_____________________________
+     
     var map = L.map('map').setView([40.730610, -73.935242], 11);
     mapLink = 
         '<a href="http://openstreetmap.org">OpenStreetMap</a>';
     L.tileLayer(
-        'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        'http://korona.geog.uni-heidelberg.de/tiles/roadsg/x={x}&y={y}&z={z}', {
         attribution: '&copy; ' + mapLink + ' Contributors',
-         maxZoom: 18,
+         maxZoom: 19,
         }).addTo(map);
         
     /* Initialize the SVG layer */
@@ -169,33 +205,51 @@ tr:hover {
     /* pick up the SVG from the map object */
 	var svg = d3.select("#map").select("svg"),
 	g = svg.append("g");
-    
-        
-var x = d3.scaleLinear()
-    .domain([minDelay, maxDelay])
-    .rangeRound([600, 860]);
-        
+
+
 //_____________________________LEGEND_____________________________   
+//Append a defs (for definition) element to SVG for linear gradient
+var leg = d3.select("#legend").append("svg").attr("width","100%").attr("height","100%");
+var defs = leg.append("defs");
 
-var leg = d3.select("#legend").append("g")
-    .attr("class", "key")
-    .attr("transform", "translate(0,40)");
+//Append a linearGradient element to the defs and give it a unique id
+var linearGradient = defs.append("linearGradient")
+    .attr("id", "linear-gradient");
+//Horizontal gradient
+linearGradient
+    .attr("x1", "0%")
+    .attr("y1", "0%")
+    .attr("x2", "100%")
+    .attr("y2", "0%");
 
-leg.selectAll("rect")
-  .data(color.range().map(function(d) {
-      d = color.invertExtent(d);
-      if (d[0] == null) d[0] = x.domain()[0];
-      if (d[1] == null) d[1] = x.domain()[1];
-      return d;
-    }))
-  .enter().append("rect")
-    .attr("height", 8)
-    .attr("x", function(d) { return x(d[0]); })
-    .attr("width", function(d) { return x(d[1]) - x(d[0]); })
-    .attr("fill", function(d) { return color(d[0]); });
+//Append multiple color stops by using D3's data/enter step
+linearGradient.selectAll("stop") 
+    .data( color.range() )                  
+    .enter().append("stop")
+    .attr("offset", function(d,i) { return i/(color.range().length-1); })
+    .attr("stop-color", function(d) { return d; });
 
+leg.append("rect")
+	.attr("width", "100%")
+	.attr("height", "100%")
+	.style("fill", "url(#linear-gradient)");
         
+//Set scale for x-axis on the legend based on size of map and range of relative synergy
+var xScale = d3.scaleLinear()
+	 .range([0, 700])
+	 .domain([minDelay, maxDelay]);
+     
+
+//Define x-axis
+var xAxis = d3.axisBottom(xScale)
+	  .ticks(8);
         
+
+
+//Set up X axis
+leg.append("g")
+	.attr("class", "axis")
+	.call(xAxis);
       //_____________________________D3_____________________________      
    
 
@@ -211,16 +265,16 @@ leg.selectAll("rect")
 			.data(collection.objects)
 			.enter().append("circle")
 			.attr("r", function(d) { return d.properties.delay*.00000005;})
-            .attr("class",function(d) { return "st_point";})
+            .attr("class",function(d) { return "st_point reg";})
             .attr("data-name", function(d) { return d.properties.station;})
             .attr("data-sdelay", function(d) { return d.properties.delay;})
             .on("mouseover", function(d){
-                d3.select("h2").text(d.properties.station);
-                d3.select(this).attr("class", "st_point hover-r");
+                d3.select(".header h2").text(d.properties.station);
+                
             })
             .on("mouseout", function(d){
-                d3.select("h2").text("");
-                d3.select(this).attr("class",function(d) { return "id_"+d.properties.station_id + " st_point";});
+                d3.select(".header h2").text("");
+                //d3.select(this).attr("class",function(d) { return "id_"+d.properties.station_id + " st_point";});     
             }) 
             .on("click", disrupt);
             
@@ -246,45 +300,63 @@ leg.selectAll("rect")
 //____________________________FUNCTIONS____________________________
 
 function disrupt () {
-    //.................add the hover-s class; clear the stations disrupted span
-    this.setAttribute("class","st_point hover-s")
+    //.................add the hover-s class; 
+    this.setAttribute("class","st_point sel")
+    
+    //clear previous disrupted station text and table
     d3.select("#selectdata").select("span").remove();
-    d3.select("#dtable").select("span").remove();
+    d3.selectAll("table").remove();
+    
     //.................only add stations to disrupt if list is less than 2, if over, send an alert
     if (rnodes.length<2){
         rnodes.push(this.getAttribute('data-name'));}
     else {
         window.alert("Two stations have already been selected. Clear the list to select alternate stations.");
     }
-    //.................update the stations disrupted span
+         //.................update the stations disrupted span
         d3.select("#selectdata").append("span").text( rnodes);
     
         
-    var paired = pnr_json.features.filter(function (p){ return p.station_0==rnodes[0] && p.station_1==rnodes[1];});
-    
+    while (rnodes.length > 1 ) { 
+        var paired = pnr_json.features.filter(function (p){ return p.station_0==rnodes[0] && p.station_1==rnodes[1]|| p.station_1==rnodes[0] && p.station_0==rnodes[1];});
+        console.log(paired);
+        console.log(paired[0].synergy/paired[0].sum);
+        console.log(color(paired[0].synergy/paired[0].sum));
+        console.log(color(paired[0].synergy/paired[0].sum));
        
-    // render the table(s)
-	d3.select('#dtable').select("table").remove();
+        // render the table(s)
+	   d3.select('#dtable').select("table").remove();
     
-    var tabledet = [{"station":paired[0].station_0,"criticality":paired[0].delay_0},
+        var tabledet = [{"station":paired[0].station_0,"criticality":paired[0].delay_0},
                     {"station":paired[0].station_1,"criticality":paired[0].delay_1},
-                    {"station":rnodes, "criticality": paired[0].delay_with_demand}];
+                    {"station":rnodes, "criticality": paired[0].delay_with_demand},
+                    {"station":rnodes, "synergy":paired[0].synergy}];
     
-    
-    tabulate(tabledet, ['station', 'criticality']); 
-    d3.select("#dtable").append("span").text( "Synergy: "+(paired[0].delay_with_demand-paired[0].sum)/paired[0].sum*100+"%").attr("class","synergy");
-    d3.selectAll("circle").style("fill",color((paired[0].delay_with_demand-paired[0].sum)/paired[0].sum*100));
+        
+        //add the table
+        tabulate(tabledet, ['station', 'criticality', 'synergy']); 
+        //add the relative synergy value
+        d3.select("#info").append("g").append("text").text( "Relative Synergy of " +paired[0].station_0 +" to " + paired[0].station_1 +" : "+ paired[0].synergy/paired[0].sum*100+"%").attr("class","synergy");
+        //update the fill value
+        d3.selectAll(".reg").style("fill", color(paired[0].synergy/paired[0].sum));
+        break;
+    };
 };
 
 function clearrecalc (){
     //.................clear the stations disrupted span
     d3.select("#selectdata").select("span").remove();
-    d3.select("#dtable").select("span").remove();
-    d3.selectAll("circle").style("fill","#274127");
+    d3.select("#dtable").select("table").remove();
+    d3.select("#info").select("text").remove();
+    
+    d3.select(".sel").attr("class", "st_point reg");
+    
+    d3.selectAll(".reg").style("fill",null);
+    
     //.................clear the last stations to disrupt added
     rnodes.pop();
     //.................update the stations disrupted span
-    d3.select("#selectdata").append("span").text( rnodes);
+    d3.select("#selectdata").append("span").text(rnodes);
     
     
 };
@@ -316,8 +388,7 @@ function tabulate(data, columns) {
 		    .text(function (d) { return d.value; });
 	  return table;
 	}
-	// render the table(s)
-	//tabulate(tabledet, ['Removed Nodes', 'Summed Criticality', 'Paired Criticality']); // 3 column table
+	
     
      
         
